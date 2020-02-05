@@ -323,19 +323,164 @@ if __name__=='__main__':
 
 with lock 等于 lock.acquire()  。。。lock.release()
 
+```
+#1.如果在一个并发的环境下，涉及到某部分的内容
+	#是需要修改一些所有进程都共享数据资源
+	#需要加锁来维护数据的安全
+#2.在数据安全的基础上，才考虑效率问题
+#3.同步存在的意义
+	#数据的安全性
+#在主进程下实例化lock=Lock()对象
+#把这把锁传递给子进程
+#在子进程中 对需要加锁的代码 进行with lock：
+	#with lock 相当于lock.acquire()和lock.release()
+#在进程中需要加锁的场景
+	#共享的数据源（文件，数据库）
+	#对资源进行修改、删除操作
+#加锁之后能够保证数据的安全性，但是也降低了程序的执行效率
+```
 
 
-##### 3.9 IPC机制
 
-##### IPC机制（inter process comunitus） 1.queue 2.pip管道
+```
+from  multiprocessing import Process,Lock
+import time,os
+import json
+
+
+def serach_tick(user):
+    with open('aaa','r')  as f:
+        dic=json.load(f)
+        print('%s查询结果:%s张余票'%(user,dic['count']))
+
+def buy_tick(user,lock):
+    # lock.acquire()
+    with lock:
+        time.sleep(0.2)
+        with open('aaa','r')  as f:
+            dic=json.load(f)
+            if dic['count']>0:
+                print('%s买到票了'%(user))
+                dic['count'] -= 1
+            else:
+                print('%s没买到票了' % (user))
+            time.sleep(0.2)
+            with open('aaa','w') as f:
+                json.dump(dic,f)
+    # lock.release()
+
+
+def task(user,lock):
+   serach_tick(user)
+   # with lock:
+   buy_tick(user,lock)
+
+
+if __name__=='__main__':
+    lock = Lock()
+    for i in range(10):
+        p=Process(target=task,args=('user%s'%i,lock))
+        p.start()
+#
+```
+
+
+
+
+
+##### 3.9进程间通信-IPC机制
+
+IPC（inter process communication） 进程间通信。
+
+###### 	1.queue 
+
+###### 	2.pip管道
 
 - Queue基于 天生就是数据安全的
   - 文件家族的socket pickle lock
 - pip管道（不安全）=文件家族的socket pickle
 
-
-
 - 队列=管道+锁
-- 
 
-​	
+```
+from multiprocessing import Process,queues
+
+n=1000
+def func():
+    global n
+    n-=1
+    print(n)
+
+if __name__=='__main__':
+    p_l=[]
+    for i in range(10):
+        p=Process(target=func)
+        p.start()
+        p_l.append(p)
+    for i in p_l:i.join()
+    print('___>>>',n)#1000
+ #由于windows操作系统在创建子进程时，是将主进程python代码全部import到子进程，所以n也会copy到每个子进程，进程间数据独立 所以子进程输出的n都为999，主进程输出
+```
+
+```
+##Queue 先进先出
+def func(exp,q):
+    ret=eval(exp)
+    q.put({ret,1,2})
+    q.put(2*ret)
+    q.put(3*ret)
+    q.put(4*ret)
+    
+if __name__=='__main__':
+    q = Queue()
+    Process(target = func, args = ('1+2+3', q)).start()
+    print(q.get())
+    print(q.get())
+    print(q.get())
+    print(q.get())
+```
+
+Queue()
+
+```
+q=Queue(3)   # 设置队列长度
+q.put(1)     # 放入数据
+q.put(2)
+q.put(3)
+print(123)
+q.put(4)    #当队列为满的时候再向队列中放数据 队列会阻塞
+print(12345)
+q.put(5)
+```
+
+q.put_nowait
+
+```
+import queue
+q=Queue(3)   # 设置队列长度
+q.put(1)     # 放入数据
+q.put(2)
+q.put(3)
+print(123)          #当队列为满的时候再向队列中放数据 队列会阻塞
+try:
+    q.put_nowait(4) # 当队列为满的时候再向队列中放数据 会报错并且会丢失数据
+except queue.Full:
+    pass
+print(12345)
+```
+
+q.get_noewait
+
+```
+print(q.get())
+print(q.get())
+print(q.get())
+try:
+    print(q.get_nowait())   # 在队列为空的时候 直接报错
+except queue.Empty:         #报错类型在queue模块中，所以要import queue
+    pass
+print(q.get())   # 在队列为空的时候会发生阻塞
+print(q.get())   # 在队列为空的时候会发生阻塞
+
+```
+
